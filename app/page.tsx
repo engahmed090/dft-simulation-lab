@@ -5,31 +5,9 @@ import {
   ResponsiveContainer, ReferenceLine, ScatterChart, Scatter, Legend,
 } from "recharts";
 import { Cpu, Radio, Zap, Activity, Play, RotateCcw, Wifi, Filter, AlertTriangle } from "lucide-react";
+import TabTimeFreq from "./TabTimeFreq";
 
 /* ─── helpers ─── */
-function genTimeDomain(f1: number, f2: number, noise: number) {
-  return Array.from({ length: 128 }, (_, i) => {
-    const t = i / 128;
-    const n = (Math.random() - 0.5) * noise * 2;
-    return { t: +t.toFixed(3), s: +(Math.sin(2 * Math.PI * f1 * t) + 0.6 * Math.sin(2 * Math.PI * f2 * t) + n).toFixed(4) };
-  });
-}
-
-function computeFFT(f1: number, f2: number, noise: number) {
-  const N = 64;
-  return Array.from({ length: N }, (_, k) => {
-    let re = 0, im = 0;
-    for (let n = 0; n < N; n++) {
-      const t = n / N;
-      const x = Math.sin(2 * Math.PI * f1 * t) + 0.6 * Math.sin(2 * Math.PI * f2 * t) + (Math.random() - 0.5) * noise * 0.3;
-      re += x * Math.cos(2 * Math.PI * k * n / N);
-      im -= x * Math.sin(2 * Math.PI * k * n / N);
-    }
-    const mag = Math.sqrt(re * re + im * im) / N;
-    return { k, mag: +mag.toFixed(4) };
-  });
-}
-
 function genOFDM(interference: boolean, filtered: boolean, fading: boolean) {
   return Array.from({ length: 64 }, (_, i) => {
     let base = Math.random() * 0.3 + 0.1;
@@ -47,73 +25,6 @@ function genChannel() {
     const estH = trueH * (1 + (Math.random() - 0.5) * 0.004);
     return { k, true: +trueH.toFixed(4), est: +estH.toFixed(4) };
   });
-}
-
-/* ─── tab 1 ─── */
-function Tab1() {
-  const [f1, setF1] = useState(3);
-  const [f2, setF2] = useState(7);
-  const [noise, setNoise] = useState(0.2);
-  const [td, setTd] = useState(() => genTimeDomain(3, 7, 0.2));
-  const [fd, setFd] = useState(() => computeFFT(3, 7, 0.2));
-
-  useEffect(() => {
-    setTd(genTimeDomain(f1, f2, noise));
-    setFd(computeFFT(f1, f2, noise));
-  }, [f1, f2, noise]);
-
-  const sliderClass = "w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700 accent-cyan-400";
-
-  return (
-    <div className="space-y-6">
-      <div className="grid grid-cols-3 gap-6">
-        {[
-          { label: "Frequency F1 (Hz)", val: f1, set: setF1, min: 1, max: 20 },
-          { label: "Frequency F2 (Hz)", val: f2, set: setF2, min: 1, max: 20 },
-          { label: "Noise Level σ", val: noise, set: setNoise, min: 0, max: 2, step: 0.05 },
-        ].map(({ label, val, set, min, max, step = 1 }) => (
-          <div key={label} className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
-            <div className="flex justify-between mb-2">
-              <span className="text-slate-400 text-sm">{label}</span>
-              <span className="text-cyan-400 font-mono text-sm font-bold">{val}</span>
-            </div>
-            <input type="range" min={min} max={max} step={step} value={val}
-              onChange={e => set(Number(e.target.value))} className={sliderClass} />
-          </div>
-        ))}
-      </div>
-      <div className="grid grid-cols-2 gap-6">
-        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
-          <p className="text-cyan-400 text-xs font-mono mb-3 flex items-center gap-2"><Activity size={14} /> TIME DOMAIN  s(t)</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={td}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="t" tick={{ fill: "#94a3b8", fontSize: 10 }} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 10 }} />
-              {/* @ts-ignore */}
-              <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #06b6d4", borderRadius: 8 }} />
-              <Line type="monotone" dataKey="s" stroke="#06b6d4" dot={false} strokeWidth={1.5}
-                style={{ filter: "drop-shadow(0 0 4px #06b6d4)" }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-        <div className="bg-slate-800/60 border border-slate-700 rounded-xl p-4">
-          <p className="text-violet-400 text-xs font-mono mb-3 flex items-center gap-2"><Zap size={14} /> FREQUENCY DOMAIN  S(ω)</p>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={fd}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="k" tick={{ fill: "#94a3b8", fontSize: 10 }} />
-              <YAxis tick={{ fill: "#94a3b8", fontSize: 10 }} />
-              {/* @ts-ignore */}
-              <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #8b5cf6", borderRadius: 8 }} />
-              <Bar dataKey="mag" fill="#8b5cf6" radius={[2, 2, 0, 0]}
-                style={{ filter: "drop-shadow(0 0 6px #8b5cf6)" }} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-    </div>
-  );
 }
 
 /* ─── tab 2 ─── */
@@ -373,7 +284,7 @@ export default function Home() {
         </div>
         {/* Tab content */}
         <div className="animate-in fade-in duration-300">
-          {tab === 0 && <Tab1 />}
+          {tab === 0 && <TabTimeFreq />}
           {tab === 1 && <Tab2 />}
           {tab === 2 && <Tab3 />}
           {tab === 3 && <Tab4 />}
