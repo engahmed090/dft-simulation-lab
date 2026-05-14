@@ -1,353 +1,311 @@
 "use client";
 import { useState, useMemo, useCallback } from "react";
 import {
-  LineChart, Line, BarChart, Bar,
-  XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
+  LineChart, Line, BarChart, Bar, ScatterChart, Scatter,
+  XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, ZAxis
 } from "recharts";
 import {
-  ShieldAlert, ShieldCheck, Radio,
-  Activity, Zap, Lock, Unlock, Eye, EyeOff,
+  Zap, Lock, Unlock, Eye, EyeOff, Prism, Mic2, Activity, SplitSquareVertical
 } from "lucide-react";
 
-/* ─────────────────────────── data helpers ─────────────────────────── */
+/* ─────────────────────────── SCENARIO 1: LIGHT PRISM DATA ─────────────────────────── */
 
-function buildTime(tFreq: number, jFreq: number, jAmp: number, filtered: boolean) {
+const PRISM_COLORS = [
+  { name: "Red",    freq: 2,  color: "#ef4444" },
+  { name: "Orange", freq: 4,  color: "#f97316" },
+  { name: "Yellow", freq: 6,  color: "#eab308" },
+  { name: "Green",  freq: 8,  color: "#22c55e" },
+  { name: "Blue",   freq: 10, color: "#3b82f6" },
+  { name: "Violet", freq: 12, color: "#a855f7" },
+];
+
+function buildPrismTime() {
   return Array.from({ length: 300 }, (_, i) => {
     const t = i / 300;
-    const target = Math.sin(2 * Math.PI * tFreq * t);
-    const jammer = filtered
-      ? 0
-      : jAmp * Math.sin(2 * Math.PI * jFreq * t + 1.1) +
-        jAmp * 0.35 * Math.cos(2 * Math.PI * jFreq * 2.3 * t) +
-        (Math.random() - 0.5) * jAmp * 0.28;
-    return { t: +(t).toFixed(4), s: +(target + jammer).toFixed(4) };
+    // Composite sum of all wavelengths
+    const composite = PRISM_COLORS.reduce((sum, c) => sum + Math.sin(2 * Math.PI * c.freq * t), 0);
+    return { t: +(t).toFixed(4), s: +(composite).toFixed(4) };
   });
 }
 
-function buildFreq(tFreq: number, jFreq: number, jAmp: number, filtered: boolean) {
-  const N = 80;
+function buildPrismFreq() {
+  const N = 15;
   return Array.from({ length: N }, (_, k) => {
-    const tBin = Math.round((tFreq / 20) * N);
-    const jBin = Math.round((jFreq / 20) * N);
-    const isTarget = Math.abs(k - tBin) <= 1;
-    const isJammer = Math.abs(k - jBin) <= 1;
-    const targetMag = isTarget ? 0.88 + Math.random() * 0.06 : Math.random() * 0.018;
-    const jamMag    = isJammer && !filtered ? jAmp * 0.48 + Math.random() * 0.04 : 0;
-    return { k, target: +targetMag.toFixed(4), jammer: +jamMag.toFixed(4) };
+    const matchedColor = PRISM_COLORS.find(c => c.freq === k);
+    return {
+      k,
+      mag: matchedColor ? 1.0 : 0.05,
+      fill: matchedColor ? matchedColor.color : "#1e293b",
+      name: matchedColor ? matchedColor.name : "None",
+    };
   });
 }
 
-/* ─────────────────────────── sub-components ───────────────────────── */
+/* ─────────────────────────── SCENARIO 2: COMPLEX VOICE DATA ─────────────────────────── */
 
-function BlindOverlay() {
+function buildVoiceTime() {
+  return Array.from({ length: 400 }, (_, i) => {
+    const t = i / 400;
+    // Simulate vocal envelope + complex harmonics (formants)
+    const envelope = Math.exp(-Math.pow(t - 0.5, 2) * 20) * (0.8 + 0.2 * Math.random());
+    const formants = 
+      1.5 * Math.sin(2 * Math.PI * 15 * t) + 
+      0.8 * Math.sin(2 * Math.PI * 35 * t + 1.2) + 
+      0.4 * Math.sin(2 * Math.PI * 60 * t - 0.5) +
+      0.2 * Math.sin(2 * Math.PI * 110 * t) +
+      (Math.random() - 0.5) * 0.3; // breath noise
+    return { t: +(t).toFixed(4), s: +(formants * envelope).toFixed(4) };
+  });
+}
+
+function buildVoiceFreq() {
+  const N = 128;
+  return Array.from({ length: N }, (_, k) => {
+    // Formant peaks around bin 15, 35, 60
+    let mag = 0.02 + Math.random() * 0.05;
+    let phase = (Math.random() - 0.5) * 2 * Math.PI;
+
+    if (Math.abs(k - 15) < 3) { mag += 1.5 * Math.exp(-Math.pow(k - 15, 2) / 2); phase = Math.PI / 4; }
+    if (Math.abs(k - 35) < 3) { mag += 0.8 * Math.exp(-Math.pow(k - 35, 2) / 2); phase = -Math.PI / 3; }
+    if (Math.abs(k - 60) < 2) { mag += 0.4 * Math.exp(-Math.pow(k - 60, 2)); phase = Math.PI / 2; }
+    
+    // Normalize phase between -PI and PI
+    if (phase > Math.PI) phase -= 2 * Math.PI;
+    if (phase < -Math.PI) phase += 2 * Math.PI;
+
+    return { k, mag: +mag.toFixed(4), phase: +phase.toFixed(4) };
+  });
+}
+
+/* ─────────────────────────── SUB-COMPONENTS ───────────────────────── */
+
+function BlindOverlay({ text, subtext }: { text: string; subtext: string }) {
   return (
     <div
-      className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl gap-3"
-      style={{ backdropFilter: "blur(8px)", background: "rgba(15,23,42,0.80)" }}
+      className="absolute inset-0 z-10 flex flex-col items-center justify-center rounded-xl gap-3 shadow-2xl"
+      style={{ backdropFilter: "blur(12px)", background: "rgba(15,23,42,0.85)" }}
     >
-      <Lock size={32} className="text-rose-500" />
-      <p className="text-center font-mono leading-6 px-6">
-        <span className="text-rose-400 font-bold text-sm block">SYSTEM BLIND</span>
-        <span className="text-slate-400 text-xs block">Frequency Components Unknown</span>
-        <span className="text-slate-600 text-[10px] block mt-1">
-          Like separating mixed coffee &amp; milk in the time domain
-        </span>
+      <Lock size={36} className="text-rose-500" />
+      <p className="text-center font-mono leading-6 px-8">
+        <span className="text-rose-400 font-bold text-[13px] block tracking-widest">{text}</span>
+        <span className="text-slate-400 text-xs block mt-2">{subtext}</span>
       </p>
     </div>
   );
 }
 
-interface PillProps { label: string; value: string; cls: string }
-function Pill({ label, value, cls }: PillProps) {
-  return (
-    <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono ${cls}`}>
-      <span className="opacity-60">{label}</span>
-      <span className="font-bold">{value}</span>
-    </div>
-  );
-}
-
-/* ─────────────────────────── main component ───────────────────────── */
-
 export default function TabTimeFreq() {
-  const [tFreq,    setTFreq]    = useState(3);
-  const [jFreq,    setJFreq]    = useState(12);
-  const [jAmp,     setJAmp]     = useState(2.5);
-  const [dftOn,    setDftOn]    = useState(false);
-  const [filtered, setFiltered] = useState(false);
+  const [scenario, setScenario] = useState<1 | 2>(1);
+  const [dftOn, setDftOn] = useState(false);
 
-  const toggleDft = useCallback(() => {
-    setDftOn(v => { if (v) setFiltered(false); return !v; });
-  }, []);
-
-  const resetOnSlide = useCallback((fn: (v: number) => void) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
-      fn(Number(e.target.value));
-      setFiltered(false);
-    }, []);
-
-  const tdData = useMemo(() => buildTime(tFreq, jFreq, jAmp, filtered), [tFreq, jFreq, jAmp, filtered]);
-  const fdData = useMemo(() => buildFreq(tFreq, jFreq, jAmp, filtered), [tFreq, jFreq, jAmp, filtered]);
-
-  /* derived state */
-  const ber       = filtered ? "0.01%" : dftOn  ? "18.3%" : "48.5%";
-  const berLabel  = filtered ? "Clean Payload ✓" : dftOn  ? "Partially Exposed" : "Link Failing ✗";
-  const berCls    = filtered
-    ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-400"
-    : dftOn
-    ? "border-amber-500/40 bg-amber-900/20 text-amber-400"
-    : "border-rose-500/40 bg-rose-900/20 text-rose-400";
-
-  const snr       = filtered ? "34.6 dB" : dftOn ? "9.8 dB" : "−4.2 dB";
-  const waveColor = filtered ? "#10b981" : "#f97316";
-  const waveGlow  = filtered ? "#10b981" : "#f97316";
-
-  const timeLabel = filtered
-    ? "RECOVERED TARGET SIGNAL — Pure Sinusoid (IDFT Reconstructed)"
-    : "RECEIVED WAVEFORM — ⚠ Jammer Composite (Time Domain Blind State)";
-
-  const modeCls   = filtered
-    ? "border-emerald-500/30 bg-emerald-900/10 text-emerald-400"
-    : dftOn
-    ? "border-cyan-500/30 bg-cyan-900/10 text-cyan-400"
-    : "border-rose-500/30 bg-rose-900/10 text-rose-400";
-  const modeLabel = filtered ? "SIGNAL RECOVERED" : dftOn ? "DFT ENGINE ACTIVE" : "SYSTEM BLIND";
-  const modeDot   = filtered ? "bg-emerald-400" : dftOn ? "bg-cyan-400" : "bg-rose-500";
+  // Memoized data
+  const prismTd = useMemo(() => buildPrismTime(), []);
+  const prismFd = useMemo(() => buildPrismFreq(), []);
+  
+  const voiceTd = useMemo(() => buildVoiceTime(), []);
+  const voiceFd = useMemo(() => buildVoiceFreq(), []);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-6">
 
-      {/* ── CONTROL PANEL ── */}
-      <div className="bg-slate-800/70 border border-slate-700 rounded-2xl p-5 space-y-4">
-        <div className="flex items-center gap-2">
-          <Radio size={13} className="text-cyan-400" />
-          <span className="text-cyan-400 font-mono text-[11px] tracking-widest">
-            SCENARIO — RESCUING WIRELESS PAYLOAD FROM JAMMING NOISE
-          </span>
-          <div className={`ml-auto flex items-center gap-1.5 px-3 py-1 rounded-full border text-[11px] font-mono ${modeCls}`}>
-            <span className={`w-1.5 h-1.5 rounded-full animate-pulse inline-block ${modeDot}`} />
-            {modeLabel}
-          </div>
+      {/* ── MASSIVE SCENARIO TOGGLE & DFT SWITCH ── */}
+      <div className="bg-slate-900/80 border border-slate-700/80 rounded-2xl p-6 shadow-xl flex flex-col gap-6">
+        
+        {/* Scenario Selector */}
+        <div className="flex gap-4 p-1.5 bg-slate-950/50 rounded-xl border border-slate-800">
+          <button
+            onClick={() => { setScenario(1); setDftOn(false); }}
+            className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-lg font-mono text-sm transition-all duration-300 ${
+              scenario === 1 
+                ? "bg-slate-800 text-white shadow-lg border border-slate-600" 
+                : "text-slate-500 hover:text-slate-300 hover:bg-slate-900"
+            }`}
+          >
+            <Prism size={18} className={scenario === 1 ? "text-cyan-400" : ""} />
+            EXAMPLE 1: WHITE LIGHT PRISM ANALOGY
+          </button>
+          
+          <button
+            onClick={() => { setScenario(2); setDftOn(false); }}
+            className={`flex-1 flex items-center justify-center gap-3 py-4 rounded-lg font-mono text-sm transition-all duration-300 ${
+              scenario === 2 
+                ? "bg-slate-800 text-white shadow-lg border border-slate-600" 
+                : "text-slate-500 hover:text-slate-300 hover:bg-slate-900"
+            }`}
+          >
+            <Mic2 size={18} className={scenario === 2 ? "text-cyan-400" : ""} />
+            EXAMPLE 2: COMPLEX VOCAL/SURAT PAYLOAD
+          </button>
         </div>
 
-        {/* sliders */}
-        <div className="grid grid-cols-3 gap-4">
-          {([
-            { label: "Target Data Freq", unit: "Hz",  val: tFreq, set: setTFreq, min: 1,   max: 15,  step: 1,   accent: "#22d3ee" },
-            { label: "Jammer Noise Freq",unit: "Hz",  val: jFreq, set: setJFreq, min: 2,   max: 20,  step: 1,   accent: "#f87171" },
-            { label: "Jammer Power",     unit: "Amp", val: jAmp,  set: setJAmp,  min: 0.5, max: 4.0, step: 0.1, accent: "#fb923c" },
-          ] as const).map(({ label, unit, val, set, min, max, step, accent }) => (
-            <div key={label} className="bg-slate-900/60 border border-slate-700/60 rounded-xl p-3">
-              <div className="flex justify-between mb-2">
-                <span className="text-slate-400 text-[11px]">{label}</span>
-                <span className="font-mono text-[11px] font-bold" style={{ color: accent }}>
-                  {val} {unit}
+        {/* Master Execution Switch */}
+        <div className="flex items-center justify-center pt-2">
+          <button
+            onClick={() => setDftOn(!dftOn)}
+            className={`flex items-center justify-center gap-4 px-12 py-5 rounded-2xl font-mono text-lg font-bold tracking-widest transition-all duration-500 ${
+              dftOn
+                ? "bg-gradient-to-r from-violet-600 via-fuchsia-600 to-rose-600 text-white shadow-[0_0_35px_rgba(217,70,239,0.4)]"
+                : "bg-slate-800 border-2 border-slate-700 text-slate-400 hover:border-slate-500 hover:text-slate-200"
+            }`}
+          >
+            {dftOn ? (
+              <><Unlock size={22} className="animate-pulse" /> DFT MATHEMATICAL ENGINE ACTIVE</>
+            ) : (
+              <><Lock size={22} /> ACTIVATE DFT ENGINE</>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* ─────────────────────────── RENDER SCENARIO 1 ─────────────────────────── */}
+      {scenario === 1 && (
+        <div className="grid grid-cols-2 gap-6 animate-in fade-in zoom-in-95 duration-500">
+          
+          {/* Left: White Light Composite */}
+          <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Activity size={15} className="text-white drop-shadow-[0_0_5px_rgba(255,255,255,1)]" />
+              <span className="font-mono text-xs text-white drop-shadow-[0_0_5px_rgba(255,255,255,1)] tracking-wider">
+                COMPOSITE WAVEFORM s(t) — PURE "WHITE LIGHT"
+              </span>
+            </div>
+            <ResponsiveContainer width="100%" height={320}>
+              <LineChart data={prismTd}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="t" tick={{ fill: "#475569", fontSize: 10 }} tickLine={false} />
+                <YAxis tick={{ fill: "#475569", fontSize: 10 }} tickLine={false} />
+                {/* @ts-ignore */}
+                <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #fff", borderRadius: 8, color: "#fff", fontFamily: "monospace" }} />
+                <Line
+                  type="monotone" dataKey="s" stroke="#ffffff" dot={false} strokeWidth={2.5}
+                  style={{ filter: "drop-shadow(0 0 8px rgba(255,255,255,0.8))" }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Right: Prismatic Spectrum */}
+          <div className="relative bg-slate-900 border border-slate-700 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Prism size={15} className={dftOn ? "text-fuchsia-400" : "text-slate-600"} />
+              <span className={`font-mono text-xs tracking-wider ${dftOn ? "text-fuchsia-400" : "text-slate-600"}`}>
+                DISCRETE SPECTRUM S(ω) — COLOR WAVELENGTHS
+              </span>
+            </div>
+            
+            <ResponsiveContainer width="100%" height={320}>
+              <BarChart data={prismFd} barCategoryGap="20%">
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="k" tick={{ fill: "#475569", fontSize: 10 }} tickLine={false} />
+                <YAxis tick={{ fill: "#475569", fontSize: 10 }} tickLine={false} />
+                {/* @ts-ignore */}
+                <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #d946ef", borderRadius: 8, fontFamily: "monospace" }} />
+                
+                <Bar dataKey="mag" radius={[4, 4, 0, 0]} isAnimationActive animationDuration={600}>
+                  {prismFd.map((entry, i) => (
+                    <Cell 
+                      key={`cell-${i}`} 
+                      fill={entry.fill} 
+                      style={entry.fill !== "#1e293b" ? { filter: `drop-shadow(0 0 10px ${entry.fill})` } : {}} 
+                    />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+
+            {!dftOn && (
+              <BlindOverlay 
+                text="BLIND STATE" 
+                subtext="Internal color wavelengths merged and unreadable. A Mathematical Prism is required." 
+              />
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ─────────────────────────── RENDER SCENARIO 2 ─────────────────────────── */}
+      {scenario === 2 && (
+        <div className="grid grid-cols-12 gap-6 animate-in fade-in zoom-in-95 duration-500">
+          
+          {/* Left: Complex Vocal Waveform */}
+          <div className="col-span-5 bg-slate-900 border border-slate-700 rounded-2xl p-5 flex flex-col gap-4 shadow-xl">
+            <div className="flex items-center gap-2 border-b border-slate-800 pb-3">
+              <Mic2 size={15} className="text-cyan-400" />
+              <span className="font-mono text-xs text-cyan-400 drop-shadow-[0_0_3px_rgba(34,211,238,0.5)] tracking-wider">
+                COMPLEX VOCAL PAYLOAD s(t)
+              </span>
+            </div>
+            
+            <ResponsiveContainer width="100%" height={480}>
+              <LineChart data={voiceTd} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                <XAxis dataKey="t" tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} />
+                <YAxis tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} />
+                {/* @ts-ignore */}
+                <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #22d3ee", borderRadius: 8, fontFamily: "monospace" }} />
+                <Line
+                  type="monotone" dataKey="s" stroke="#22d3ee" dot={false} strokeWidth={1}
+                  style={{ filter: "drop-shadow(0 0 4px rgba(34,211,238,0.6))" }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Right: Dual Spectrum Split View */}
+          <div className="col-span-7 relative bg-slate-900 border border-slate-700 rounded-2xl flex flex-col shadow-xl overflow-hidden">
+            
+            {/* Top Half: Magnitude Spectrum */}
+            <div className="flex-1 p-5 border-b border-slate-800 flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <SplitSquareVertical size={14} className={dftOn ? "text-amber-400" : "text-slate-600"} />
+                <span className={`font-mono text-[11px] tracking-wider ${dftOn ? "text-amber-400" : "text-slate-600"}`}>
+                  MAGNITUDE SPECTRUM |X(ω)| — CORE FORMANTS
                 </span>
               </div>
-              <input
-                type="range" min={min} max={max} step={step} value={val}
-                onChange={resetOnSlide(set as (v: number) => void)}
-                className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-slate-700"
-                style={{ accentColor: accent }}
-              />
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={voiceFd} barGap={0} barCategoryGap="10%" margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="k" tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} />
+                  <YAxis tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} />
+                  {/* @ts-ignore */}
+                  <Tooltip contentStyle={{ background: "#0f172a", border: "1px solid #fbbf24", borderRadius: 8, fontFamily: "monospace" }} />
+                  <Bar dataKey="mag" fill="#fbbf24" radius={[2, 2, 0, 0]} isAnimationActive animationDuration={600}
+                    style={{ filter: dftOn ? "drop-shadow(0 0 5px rgba(251,191,36,0.5))" : "none" }}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
-          ))}
-        </div>
 
-        {/* master controls row */}
-        <div className="flex flex-wrap items-center gap-3">
-          {/* DFT toggle */}
-          <button
-            onClick={toggleDft}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-mono text-sm font-bold transition-all duration-300 ${
-              dftOn
-                ? "bg-gradient-to-r from-cyan-600 to-violet-600 text-white shadow-[0_0_22px_rgba(139,92,246,0.45)]"
-                : "bg-slate-700 border border-slate-600 text-slate-400 hover:bg-slate-600 hover:text-slate-200"
-            }`}
-          >
-            {dftOn
-              ? <><Unlock size={14} /> DFT Engine ON — X-Ray Vision</>
-              : <><Lock    size={14} /> Bypassed / Time Domain Only</>
-            }
-          </button>
+            {/* Bottom Half: Phase Spectrum */}
+            <div className="flex-1 p-5 flex flex-col gap-3">
+              <div className="flex items-center gap-2">
+                <SplitSquareVertical size={14} className={dftOn ? "text-indigo-400" : "text-slate-600"} />
+                <span className={`font-mono text-[11px] tracking-wider ${dftOn ? "text-indigo-400" : "text-slate-600"}`}>
+                  PHASE SPECTRUM ∠X(ω) — [ -π to +π ]
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height="100%">
+                <ScatterChart margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
+                  <XAxis dataKey="k" type="number" tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} domain={[0, 127]} />
+                  <YAxis dataKey="phase" type="number" tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} domain={[-3.15, 3.15]} ticks={[-3.14, 0, 3.14]} tickFormatter={(val) => val === 0 ? "0" : val > 0 ? "+π" : "-π"} />
+                  {/* @ts-ignore */}
+                  <Tooltip cursor={{ strokeDasharray: '3 3' }} contentStyle={{ background: "#0f172a", border: "1px solid #818cf8", borderRadius: 8, fontFamily: "monospace" }} />
+                  <Scatter name="Phase" data={voiceFd} fill="#818cf8" shape="circle" isAnimationActive animationDuration={600} />
+                </ScatterChart>
+              </ResponsiveContainer>
+            </div>
 
-          {/* scrub button */}
-          <button
-            onClick={() => { if (dftOn && !filtered) setFiltered(true); }}
-            disabled={!dftOn || filtered}
-            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl font-mono text-sm font-bold transition-all duration-300 ${
-              filtered
-                ? "bg-emerald-900/40 border border-emerald-500/40 text-emerald-400 cursor-default"
-                : dftOn
-                ? "bg-gradient-to-r from-emerald-600 to-teal-600 text-white hover:brightness-110 shadow-[0_0_18px_rgba(16,185,129,0.4)]"
-                : "bg-slate-800 border border-slate-700 text-slate-600 cursor-not-allowed opacity-40"
-            }`}
-          >
-            {filtered
-              ? <><ShieldCheck size={14} /> Jammer Nulled ✓</>
-              : <><ShieldAlert size={14} /> Scrub Jamming Noise</>
-            }
-          </button>
-
-          {/* eye icon hint */}
-          <div className="ml-auto text-slate-600 text-xs font-mono flex items-center gap-1.5">
-            {dftOn ? <Eye size={12} className="text-cyan-500" /> : <EyeOff size={12} />}
-            {dftOn ? "Spectrum visible" : "Spectrum locked"}
+            {!dftOn && (
+              <BlindOverlay 
+                text="CRITICAL BLINDNESS" 
+                subtext="Magnitude and Phase geometry locked inside raw time-domain chaos." 
+              />
+            )}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ── DUAL CHARTS ── */}
-      <div className="grid grid-cols-2 gap-5">
-
-        {/* LEFT — Time Domain */}
-        <div className="bg-slate-800/70 border border-slate-700 rounded-2xl p-4 flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Activity size={13} style={{ color: waveColor }} />
-            <span className="font-mono text-[10px] leading-tight" style={{ color: waveColor }}>
-              {timeLabel}
-            </span>
-          </div>
-
-          <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={tdData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis dataKey="t" tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} />
-              <YAxis tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} domain={["auto", "auto"]} />
-              {/* @ts-ignore */}
-              <Tooltip
-                contentStyle={{
-                  background: "#0f172a",
-                  border: `1px solid ${waveColor}`,
-                  borderRadius: 8,
-                  fontSize: 11,
-                }}
-              />
-              <Line
-                type="monotone" dataKey="s" stroke={waveColor}
-                dot={false} strokeWidth={filtered ? 2 : 1.4}
-                style={{ filter: `drop-shadow(0 0 6px ${waveGlow})` }}
-                isAnimationActive animationDuration={500}
-              />
-            </LineChart>
-          </ResponsiveContainer>
-
-          {/* telemetry row */}
-          <div className="flex flex-wrap gap-2">
-            <Pill label="BER:" value={`${ber} (${berLabel})`} cls={berCls} />
-            <Pill
-              label="SNR:"
-              value={snr}
-              cls={
-                filtered
-                  ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-400"
-                  : dftOn
-                  ? "border-amber-500/40 bg-amber-900/20 text-amber-400"
-                  : "border-rose-500/40 bg-rose-900/20 text-rose-400"
-              }
-            />
-            <Pill
-              label="Mode:"
-              value={filtered ? "IDFT Reconstructed" : dftOn ? "DFT Processing" : "Raw Time Domain"}
-              cls="border-slate-700 bg-slate-900/40 text-slate-400"
-            />
-          </div>
-        </div>
-
-        {/* RIGHT — Frequency Domain */}
-        <div className="relative bg-slate-800/70 border border-slate-700 rounded-2xl p-4 flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <Zap size={13} className={dftOn ? "text-violet-400" : "text-slate-600"} />
-            <span className={`font-mono text-[10px] ${dftOn ? "text-violet-400" : "text-slate-600"}`}>
-              {dftOn
-                ? filtered
-                  ? "FREQUENCY SPECTRUM S(ω) — Jammer Nulled via Notch Filter"
-                  : "FREQUENCY SPECTRUM S(ω) — Target + Jammer Components Visible"
-                : "FREQUENCY SPECTRUM S(ω) — LOCKED"
-              }
-            </span>
-          </div>
-
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={fdData} barGap={1} barCategoryGap="8%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-              <XAxis
-                dataKey="k"
-                tick={{ fill: "#475569", fontSize: 9 }}
-                tickLine={false}
-                label={{ value: "Frequency Bin  k →", position: "insideBottom", fill: "#475569", fontSize: 10 }}
-              />
-              <YAxis tick={{ fill: "#475569", fontSize: 9 }} tickLine={false} />
-              {/* @ts-ignore */}
-              <Tooltip
-                contentStyle={{
-                  background: "#0f172a",
-                  border: "1px solid #8b5cf6",
-                  borderRadius: 8,
-                  fontSize: 11,
-                }}
-              />
-
-              {/* target stems — green */}
-              <Bar dataKey="target" name="Target Payload" radius={[3, 3, 0, 0]}
-                isAnimationActive animationDuration={450}>
-                {fdData.map((_, i) => (
-                  <Cell
-                    key={`t-${i}`}
-                    fill={dftOn ? "#10b981" : "#1e293b"}
-                    style={{ filter: dftOn ? "drop-shadow(0 0 5px #10b981)" : "none" }}
-                  />
-                ))}
-              </Bar>
-
-              {/* jammer stems — red, collapses when filtered */}
-              <Bar dataKey="jammer" name="Jamming Noise" radius={[3, 3, 0, 0]}
-                isAnimationActive animationDuration={450}>
-                {fdData.map((_, i) => (
-                  <Cell
-                    key={`j-${i}`}
-                    fill={dftOn && !filtered ? "#ef4444" : "#1e293b"}
-                    style={{ filter: dftOn && !filtered ? "drop-shadow(0 0 10px #ef4444)" : "none" }}
-                  />
-                ))}
-              </Bar>
-            </BarChart>
-          </ResponsiveContainer>
-
-          {/* frosted blind overlay when DFT off */}
-          {!dftOn && <BlindOverlay />}
-
-          {/* freq telemetry */}
-          <div className="flex flex-wrap gap-2">
-            <Pill
-              label="Target @"
-              value={dftOn ? `${tFreq} Hz ✓` : "???"}
-              cls={dftOn ? "border-emerald-500/40 bg-emerald-900/20 text-emerald-400" : "border-slate-700 bg-slate-900/40 text-slate-500"}
-            />
-            <Pill
-              label="Jammer @"
-              value={dftOn ? (filtered ? "NULLED ✓" : `${jFreq} Hz  ⚠`) : "???"}
-              cls={
-                dftOn
-                  ? filtered
-                    ? "border-slate-600 bg-slate-900/40 text-slate-500"
-                    : "border-rose-500/40 bg-rose-900/20 text-rose-400"
-                  : "border-slate-700 bg-slate-900/40 text-slate-500"
-              }
-            />
-            <Pill
-              label="Surgery:"
-              value={filtered ? "Spectrum Scrub ✓" : dftOn ? "Ready to Scrub" : "Unavailable"}
-              cls={
-                filtered
-                  ? "border-violet-500/40 bg-violet-900/20 text-violet-400"
-                  : "border-slate-700 bg-slate-900/40 text-slate-400"
-              }
-            />
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
