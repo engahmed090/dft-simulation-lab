@@ -1,6 +1,7 @@
 "use client";
 import React, { useState } from "react";
 import TabTimeFreq from "./TabTimeFreq";
+import TabMathEngine from "./TabMathEngine";
 import { Activity, Cpu, Radio, Zap } from "lucide-react";
 
 const TABS = [
@@ -56,14 +57,8 @@ export default function Home() {
           {/* Active Tab 0: Safely imported independent component */}
           {activeTab === 0 && <TabTimeFreq />}
           
-          {/* Active Tab 1: Safe Placeholder */}
-          {activeTab === 1 && (
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-16 text-center shadow-xl">
-              <Cpu size={56} className="mx-auto text-slate-600 mb-6 animate-pulse" />
-              <h2 className="text-2xl font-mono text-slate-300 font-bold tracking-widest">Tab 2: Mathematical Engine Loading...</h2>
-              <p className="text-slate-500 font-mono text-sm mt-3">Matrix Operations and Twiddle Factors are currently compiling securely.</p>
-            </div>
-          )}
+          {/* Active Tab 1: Math Engine */}
+          {activeTab === 1 && <TabMathEngine />}
 
           {/* Active Tab 2: Safe Placeholder */}
           {activeTab === 2 && (
