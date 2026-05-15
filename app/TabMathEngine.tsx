@@ -168,7 +168,7 @@ export default function TabMathEngine() {
           </div>
           <div>
             <h2 className="text-slate-200 font-mono text-sm font-bold tracking-widest uppercase">
-              {"Enterprise Microwave Backbone Link"}
+              {"Applications of DFT: Wi-Fi 6 (OFDM) Signal Recovery"}
             </h2>
             <p className="text-slate-500 font-mono text-[10px] mt-1">
               {"Simulating Multipath Fading, Attenuation, and DFT Equalization Recovery"}
@@ -184,7 +184,7 @@ export default function TabMathEngine() {
           }`}
         >
           {running ? <Power size={16} /> : <Zap size={16} />}
-          <span>{running ? "Terminate Link" : "Initialize Backbone Transmission"}</span>
+          <span>{running ? "Terminate Link" : "Initialize Wi-Fi Transmission"}</span>
         </button>
       </div>
 
@@ -196,16 +196,16 @@ export default function TabMathEngine() {
         </div>
         <div className="flex items-center justify-between px-4">
           
-          <PipeNode icon={<Activity size={24} />} label="TX NODE" sublabel="Clean QAM Signal" active={stage >= 1} color="#3b82f6" />
+          <PipeNode icon={<Activity size={24} />} label="Wi-Fi Router TX" sublabel="OFDM Data" active={stage >= 1} color="#3b82f6" />
           <ArrowLink active={stage >= 2} color="#3b82f6" />
           
-          <PipeNode icon={<Radio size={24} className={running && stage >= 2 ? "animate-pulse" : ""} />} label="ATMOSPHERIC CHANNEL" sublabel="Multipath + Severe Noise" active={stage >= 2} color="#f97316" />
+          <PipeNode icon={<Radio size={24} className={running && stage >= 2 ? "animate-pulse" : ""} />} label="Indoor Channel" sublabel="Walls & Noise" active={stage >= 2} color="#f97316" />
           <ArrowLink active={stage >= 3} color="#f97316" />
           
-          <PipeNode icon={<Activity size={24} />} label="RX NODE" sublabel="Degraded Capture" active={stage >= 3} color="#ef4444" />
+          <PipeNode icon={<Activity size={24} />} label="Mobile Device RX" sublabel="Degraded" active={stage >= 3} color="#ef4444" />
           <ArrowLink active={stage >= 4} color="#ef4444" />
           
-          <PipeNode icon={<ShieldCheck size={24} />} label="DFT EQUALIZER" sublabel="Sub-carrier Recovery" active={stage >= 4} color="#10b981" />
+          <PipeNode icon={<ShieldCheck size={24} />} label="FFT Equalizer" sublabel="Sub-carrier Recovery" active={stage >= 4} color="#10b981" />
           
         </div>
       </div>
@@ -213,7 +213,7 @@ export default function TabMathEngine() {
       {/* ── CHANNEL MEDIUM VISUALIZATION ── */}
       <div className="bg-slate-900 border border-slate-700/80 rounded-2xl p-5 shadow-xl">
         <div className="text-amber-500 font-mono text-[10px] tracking-widest mb-4 uppercase flex items-center gap-2">
-          <Zap size={12} /> {"The Channel Medium (Time-Domain Wave Degredation)"}
+          <Zap size={12} /> {"INDOOR WI-FI ENVIRONMENT (MULTIPATH DEGRADATION)"}
         </div>
         <div className="h-24 w-full bg-slate-950 rounded-xl border border-slate-800 relative overflow-hidden flex items-center">
           {/* Animated wave passing through */}
@@ -243,7 +243,7 @@ export default function TabMathEngine() {
             ))}
           </div>
           <div className="absolute right-4 top-2 text-[9px] font-mono text-slate-500 bg-slate-950 px-2 py-1 rounded border border-slate-800">
-            {"[SIMULATING 20km RF LINK]"}
+            {"[SIMULATING INDOOR WI-FI LINK]"}
           </div>
         </div>
       </div>
@@ -256,7 +256,7 @@ export default function TabMathEngine() {
           <div className="flex items-center gap-2 border-b border-slate-800 pb-3 mb-4">
             <Activity size={14} className="text-red-400" />
             <span className="font-mono text-[10px] text-red-400 tracking-widest uppercase">
-              {"Degraded Time-Domain Waveform"}
+              {"RECEIVED WI-FI SIGNAL (TIME-DOMAIN CHAOS)"}
             </span>
           </div>
           <div className="flex-1">
@@ -284,7 +284,7 @@ export default function TabMathEngine() {
           <div className="flex items-center gap-2 border-b border-slate-800 pb-3 mb-4">
             <ShieldCheck size={14} className="text-emerald-400" />
             <span className="font-mono text-[10px] text-emerald-400 tracking-widest uppercase">
-              {"Recovered Spectrum (DFT Equalization)"}
+              {"DFT SUB-CARRIER EXTRACTION (FREQUENCY DOMAIN)"}
             </span>
           </div>
           <div className="flex-1">
