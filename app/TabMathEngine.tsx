@@ -1,25 +1,26 @@
 "use client";
-import React, { useState, useEffect, useRef, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 // @ts-ignore
 import {
   LineChart, Line, BarChart, Bar,
   XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Cell,
+  ResponsiveContainer
 } from "recharts";
-import { Wifi, Radio, Cpu, Zap, Activity, Signal } from "lucide-react";
+import { Wifi, Radio, Cpu, Activity, Play } from "lucide-react";
 
 /* ─────────────────────────────────────────────
    STRICT DATA INTERFACES
 ───────────────────────────────────────────── */
 interface TimeSample { t: number; amp: number; }
-interface SubCarrier { k: number; mag: number; noisy: boolean; }
+interface SubCarrierData { index: string; amplitude: number; noise: number; }
 
 /* ─────────────────────────────────────────────
    OFDM SIGNAL GENERATORS
 ───────────────────────────────────────────── */
-function buildOFDMSymbol(noise: number, tick: number): TimeSample[] {
+function buildOFDMSymbol(noiseLevel: number, tick: number): TimeSample[] {
   const N = 128;
-  return Array.from({ length: N }, (_, i) => {
+  const data: TimeSample[] = [];
+  for (let i = 0; i < N; i++) {
     const t = i / N;
     const signal =
       Math.sin(2 * Math.PI * 2 * t + tick * 0.05) * 0.9 +
@@ -27,21 +28,31 @@ function buildOFDMSymbol(noise: number, tick: number): TimeSample[] {
       Math.sin(2 * Math.PI * 11 * t + tick * 0.07) * 0.5 +
       Math.sin(2 * Math.PI * 17 * t + tick * 0.04) * 0.4 +
       Math.sin(2 * Math.PI * 23 * t + tick * 0.06) * 0.3;
-    const noiseTerm = (Math.random() * 2 - 1) * noise * 1.5;
-    return { t: i, amp: +(signal + noiseTerm).toFixed(4) };
-  });
+    const noiseTerm = (Math.random() * 2 - 1) * noiseLevel * 1.5;
+    data.push({ t: i, amp: Number((signal + noiseTerm).toFixed(4)) });
+  }
+  return data;
 }
 
-function buildSubCarriers(noise: number, tick: number): SubCarrier[] {
+function buildSubCarriers(noiseLevel: number, tick: number): SubCarrierData[] {
   const carriers = [2, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47];
   const N = 64;
-  return Array.from({ length: N }, (_, k) => {
-    const isActive = carriers.includes(k);
+  const data: SubCarrierData[] = [];
+  for (let k = 0; k < N; k++) {
+    let isActive = false;
+    for (let j = 0; j < carriers.length; j++) {
+      if (carriers[j] === k) {
+        isActive = true;
+        break;
+      }
+    }
     const base = isActive ? 0.7 + Math.sin(tick * 0.1 + k) * 0.15 : 0.05;
-    const n = noise * (Math.random() * 0.6 + 0.2);
+    const n = noiseLevel * (Math.random() * 0.6 + 0.2);
     const mag = Math.max(0, base + n * (Math.random() > 0.5 ? 1 : -1) * 0.3);
-    return { k, mag: +mag.toFixed(3), noisy: noise > 0.4 && Math.random() > 0.65 };
-  });
+    const noisyFlag = noiseLevel > 0.4 && Math.random() > 0.65 ? 1 : 0;
+    data.push({ index: k.toString(), amplitude: Number(mag.toFixed(3)), noise: noisyFlag });
+  }
+  return data;
 }
 
 /* ─────────────────────────────────────────────
@@ -50,23 +61,25 @@ function buildSubCarriers(noise: number, tick: number): SubCarrier[] {
 function BitStream({ active, tick }: { active: boolean; tick: number }) {
   const bits = "10110100111001011010010110110010";
   const offset = tick % bits.length;
+  const displayBits: string[] = [];
+  for (let i = 0; i < 24; i++) {
+    displayBits.push(bits[(i + offset) % bits.length]);
+  }
+  
   return (
     <div className="flex gap-0.5 font-mono text-xs overflow-hidden select-none">
-      {Array.from({ length: 24 }, (_, i) => {
-        const b = bits[(i + offset) % bits.length];
-        return (
-          <span
-            key={i}
-            style={{
-              color: active ? (b === "1" ? "#22d3ee" : "#818cf8") : "#334155",
-              textShadow: active ? `0 0 8px ${b === "1" ? "#22d3ee" : "#818cf8"}` : "none",
-              transition: "color 0.2s",
-            }}
-          >
-            {b}
-          </span>
-        );
-      })}
+      {displayBits.map((b, i) => (
+        <span
+          key={i}
+          style={{
+            color: active ? (b === "1" ? "#22d3ee" : "#818cf8") : "#334155",
+            textShadow: active ? `0 0 8px ${b === "1" ? "#22d3ee" : "#818cf8"}` : "none",
+            transition: "color 0.2s",
+          }}
+        >
+          {b}
+        </span>
+      ))}
     </div>
   );
 }
@@ -106,7 +119,7 @@ function PipelineNode({ icon, label, sublabel, active, color, glow, children }: 
         </div>
         <div className="text-slate-600 text-[9px] font-mono mt-0.5">{sublabel}</div>
       </div>
-      {children && <div className="w-full mt-1">{children}</div>}
+      {children ? <div className="w-full mt-1">{children}</div> : null}
     </div>
   );
 }
@@ -144,11 +157,12 @@ function Arrow({ active, color }: { active: boolean; color: string }) {
 /* ─────────────────────────────────────────────
    CHANNEL WAVES VISUAL
 ───────────────────────────────────────────── */
-function ChannelWaves({ active, noise }: { active: boolean; noise: number }) {
-  const isHigh = noise > 0.5;
+function ChannelWaves({ active, noiseLevel }: { active: boolean; noiseLevel: number }) {
+  const isHigh = noiseLevel > 0.5;
+  const waves = [0, 1, 2, 3, 4, 5, 6];
   return (
     <div className="flex items-center justify-center gap-1 h-8">
-      {Array.from({ length: 7 }, (_, i) => (
+      {waves.map((i) => (
         <div
           key={i}
           style={{
@@ -180,20 +194,23 @@ function ChannelWaves({ active, noise }: { active: boolean; noise: number }) {
 ───────────────────────────────────────────── */
 export default function TabMathEngine() {
   const [running, setRunning] = useState(false);
-  const [noise, setNoise] = useState(0.2);
+  const [noiseLevel, setNoiseLevel] = useState(0.2);
   const [tick, setTick] = useState(0);
-  const [stage, setStage] = useState(0); // 0=idle,1=bits,2=dsp,3=channel,4=rx
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [stage, setStage] = useState(0); // 0=idle, 1=bits, 2=dsp, 3=channel, 4=rx
 
   /* tick animation */
   useEffect(() => {
+    let intervalId: any;
     if (running) {
-      intervalRef.current = setInterval(() => setTick(t => t + 1), 120);
+      intervalId = setInterval(() => {
+        setTick((t) => t + 1);
+      }, 120);
     } else {
-      if (intervalRef.current) clearInterval(intervalRef.current);
       setStage(0);
     }
-    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+    return () => {
+      if (intervalId) clearInterval(intervalId);
+    };
   }, [running]);
 
   /* stage progression */
@@ -205,10 +222,10 @@ export default function TabMathEngine() {
     if (tick === 20) setStage(4);
   }, [tick, running]);
 
-  const timeDomain = useMemo(() => buildOFDMSymbol(noise, tick), [noise, tick, running]);
-  const subCarriers = useMemo(() => buildSubCarriers(noise, tick), [noise, tick, running]);
+  const timeDomain = useMemo(() => buildOFDMSymbol(noiseLevel, tick), [noiseLevel, tick]);
+  const subCarriers = useMemo(() => buildSubCarriers(noiseLevel, tick), [noiseLevel, tick]);
 
-  const isHighNoise = noise > 0.5;
+  const isHighNoise = noiseLevel > 0.5;
 
   return (
     <div className="space-y-6 pb-12">
@@ -217,7 +234,7 @@ export default function TabMathEngine() {
       <div className="flex items-center gap-3 mb-2">
         <div className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-cyan-950/60 border border-cyan-500/30 text-cyan-400 text-xs font-mono">
           <Wifi size={13} />
-          <span className="tracking-widest">Wi-Fi 6 OFDM SIMULATION — IEEE 802.11ax</span>
+          <span className="tracking-widest">{"Wi-Fi 6 OFDM SIMULATION — IEEE 802.11ax"}</span>
         </div>
         <div className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-mono border ${isHighNoise ? "bg-red-950/40 border-red-500/40 text-red-400" : "bg-emerald-950/40 border-emerald-500/30 text-emerald-400"}`}>
           <span className={`w-1.5 h-1.5 rounded-full inline-block ${isHighNoise ? "bg-red-400 animate-ping" : "bg-emerald-400 animate-pulse"}`} />
@@ -227,7 +244,7 @@ export default function TabMathEngine() {
 
       {/* ── CONCEPT CAPTION ── */}
       <div className="bg-slate-900/80 border border-slate-700/60 rounded-xl px-5 py-3 text-xs font-mono text-slate-400">
-        <span className="text-cyan-400 font-bold">SCENARIO: </span>
+        <span className="text-cyan-400 font-bold">{"SCENARIO: "}</span>
         {"Inside a Wi-Fi 6 router, the DSP chip runs IFFT to map binary data onto 64 orthogonal sub-carriers (OFDM). "}
         {"At the receiver, the DFT perfectly separates them — even through a noisy RF channel."}
       </div>
@@ -235,56 +252,59 @@ export default function TabMathEngine() {
       {/* ── CONTROLS ── */}
       <div className="flex flex-wrap items-center gap-6 bg-slate-900/80 border border-slate-700/60 rounded-2xl p-5 shadow-xl">
         <button
-          onClick={() => { setTick(0); setStage(0); setRunning(r => !r); }}
+          onClick={() => { setTick(0); setStage(0); setRunning((r) => !r); }}
           className={`flex items-center gap-3 px-8 py-4 rounded-xl font-mono text-sm font-bold tracking-widest transition-all duration-300 border ${
             running
               ? "bg-red-900/40 border-red-500/50 text-red-300 shadow-[0_0_20px_rgba(239,68,68,0.3)]"
               : "bg-gradient-to-r from-cyan-600 to-violet-600 border-cyan-400/40 text-white shadow-[0_0_25px_rgba(6,182,212,0.35)] hover:shadow-[0_0_35px_rgba(6,182,212,0.5)]"
           }`}
         >
-          {running ? <><Signal size={18} /> STOP TRANSMISSION</> : <><Zap size={18} /> START TRANSMISSION</>}
+          {running ? <Activity size={18} /> : <Play size={18} />}
+          <span>{running ? "STOP TRANSMISSION" : "START TRANSMISSION"}</span>
         </button>
 
         <div className="flex-1 min-w-[220px]">
           <div className="flex justify-between mb-2">
             <label className="text-slate-400 font-mono text-[10px] tracking-widest uppercase">
-              Channel Interference / Noise
+              {"Channel Interference / Noise"}
             </label>
             <span className={`font-mono text-[11px] font-bold ${isHighNoise ? "text-red-400" : "text-emerald-400"}`}>
-              {Math.round(noise * 100)}%
+              {Math.round(noiseLevel * 100)}{"%"}
             </span>
           </div>
           <input
-            type="range" min={0} max={1} step={0.01} value={noise}
-            onChange={e => setNoise(parseFloat(e.target.value))}
+            type="range" min={0} max={1} step={0.01} value={noiseLevel}
+            onChange={(e) => setNoiseLevel(parseFloat(e.target.value))}
             className="w-full h-2 rounded-full appearance-none cursor-pointer"
             style={{
-              background: `linear-gradient(90deg, ${isHighNoise ? "#ef4444" : "#06b6d4"} ${noise * 100}%, #1e293b ${noise * 100}%)`,
+              background: `linear-gradient(90deg, ${isHighNoise ? "#ef4444" : "#06b6d4"} ${noiseLevel * 100}%, #1e293b ${noiseLevel * 100}%)`,
             }}
           />
           <div className="flex justify-between text-[9px] font-mono text-slate-600 mt-1">
-            <span>CLEAN</span><span>MODERATE</span><span>INTERFERENCE</span>
+            <span>{"CLEAN"}</span><span>{"MODERATE"}</span><span>{"INTERFERENCE"}</span>
           </div>
         </div>
 
         <div className="flex gap-4 text-[10px] font-mono">
-          {[
-            { label: "FFT SIZE", value: "64-pt" },
-            { label: "GUARD INT.", value: "16 smp" },
-            { label: "BAND", value: "5 GHz" },
-          ].map(s => (
-            <div key={s.label} className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-center">
-              <div className="text-slate-600 tracking-wider">{s.label}</div>
-              <div className="text-cyan-400 font-bold mt-0.5">{s.value}</div>
-            </div>
-          ))}
+          <div className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-center">
+            <div className="text-slate-600 tracking-wider">{"FFT SIZE"}</div>
+            <div className="text-cyan-400 font-bold mt-0.5">{"64-pt"}</div>
+          </div>
+          <div className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-center">
+            <div className="text-slate-600 tracking-wider">{"GUARD INT."}</div>
+            <div className="text-cyan-400 font-bold mt-0.5">{"16 smp"}</div>
+          </div>
+          <div className="bg-slate-950 border border-slate-800 rounded-lg px-3 py-2 text-center">
+            <div className="text-slate-600 tracking-wider">{"BAND"}</div>
+            <div className="text-cyan-400 font-bold mt-0.5">{"5 GHz"}</div>
+          </div>
         </div>
       </div>
 
       {/* ── ANIMATED PIPELINE ── */}
       <div className="bg-slate-950 border border-slate-800 rounded-2xl p-6 shadow-2xl">
         <div className="text-slate-600 font-mono text-[10px] tracking-widest mb-4 uppercase">
-          Live Router Architecture — Internal DSP Pipeline
+          {"Live Router Architecture — Internal DSP Pipeline"}
         </div>
         <div className="flex items-center justify-center flex-wrap gap-0">
 
@@ -311,9 +331,9 @@ export default function TabMathEngine() {
             color="#a78bfa"
             glow="rgba(167,139,250,0.4)"
           >
-            {stage >= 2 && (
+            {stage >= 2 ? (
               <div className="grid grid-cols-7 gap-0.5">
-                {Array.from({ length: 14 }, (_, i) => (
+                {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13].map((i) => (
                   <div
                     key={i}
                     style={{
@@ -326,7 +346,7 @@ export default function TabMathEngine() {
                   />
                 ))}
               </div>
-            )}
+            ) : null}
           </PipelineNode>
 
           <Arrow active={stage >= 3} color="#a78bfa" />
@@ -340,7 +360,7 @@ export default function TabMathEngine() {
             color={isHighNoise ? "#ef4444" : "#06b6d4"}
             glow={isHighNoise ? "rgba(239,68,68,0.4)" : "rgba(6,182,212,0.3)"}
           >
-            <ChannelWaves active={stage >= 3} noise={noise} />
+            <ChannelWaves active={stage >= 3} noiseLevel={noiseLevel} />
           </PipelineNode>
 
           <Arrow active={stage >= 4} color={isHighNoise ? "#f97316" : "#10b981"} />
@@ -354,15 +374,15 @@ export default function TabMathEngine() {
             color="#10b981"
             glow="rgba(16,185,129,0.4)"
           >
-            {stage >= 4 && (
+            {stage >= 4 ? (
               <div className="text-center font-mono text-[10px] text-emerald-400 font-bold">
                 {isHighNoise ? (
-                  <span className="text-amber-400">⚠ BER: {(noise * 8).toFixed(1)}%</span>
+                  <span className="text-amber-400">{"⚠ BER: "}{(noiseLevel * 8).toFixed(1)}{"%"}</span>
                 ) : (
-                  <span>✓ BER: 0.0%</span>
+                  <span>{"✓ BER: 0.0%"}</span>
                 )}
               </div>
-            )}
+            ) : null}
           </PipelineNode>
 
         </div>
@@ -376,11 +396,11 @@ export default function TabMathEngine() {
           <div className="flex items-center gap-2 border-b border-slate-800 pb-3 flex-shrink-0">
             <Activity size={14} className="text-cyan-400" />
             <span className="font-mono text-[11px] text-cyan-400 tracking-wider uppercase">
-              Time Domain — OFDM Symbol (Air Interface)
+              {"Time Domain — OFDM Symbol (Air Interface)"}
             </span>
-            {isHighNoise && running && (
-              <span className="ml-auto text-[9px] font-mono text-red-400 animate-pulse">CHAOTIC</span>
-            )}
+            {isHighNoise && running ? (
+              <span className="ml-auto text-[9px] font-mono text-red-400 animate-pulse">{"CHAOTIC"}</span>
+            ) : null}
           </div>
           {/* @ts-ignore */}
           <ResponsiveContainer width="100%" height="100%">
@@ -393,20 +413,9 @@ export default function TabMathEngine() {
               {/* @ts-ignore */}
               <YAxis tick={{ fill: "#334155", fontSize: 8 }} tickLine={false} domain={["auto", "auto"]} />
               {/* @ts-ignore */}
-              <Tooltip
-                contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #06b6d4", borderRadius: 8, fontFamily: "monospace", fontSize: 10 }}
-                formatter={(v: number) => [v.toFixed(3), "Amplitude"]}
-                labelFormatter={(l: number) => `Sample ${l}`}
-              />
+              <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #06b6d4", borderRadius: 8, fontFamily: "monospace", fontSize: 10 }} />
               {/* @ts-ignore */}
-              <Line
-                type="monotone"
-                dataKey="amp"
-                stroke={running && isHighNoise ? "#ef4444" : "#06b6d4"}
-                strokeWidth={1.2}
-                dot={false}
-                isAnimationActive={false}
-              />
+              <Line type="monotone" dataKey="amp" stroke={running && isHighNoise ? "#ef4444" : "#06b6d4"} strokeWidth={1.2} dot={false} isAnimationActive={false} />
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -414,9 +423,9 @@ export default function TabMathEngine() {
         {/* RIGHT: Frequency Domain Sub-carriers */}
         <div className="bg-slate-900 border border-slate-700 rounded-2xl p-5 shadow-xl flex flex-col gap-3 h-[340px]">
           <div className="flex items-center gap-2 border-b border-slate-800 pb-3 flex-shrink-0">
-            <Zap size={14} className="text-amber-400" />
+            <Activity size={14} className="text-amber-400" />
             <span className="font-mono text-[11px] text-amber-400 tracking-wider uppercase">
-              Frequency Domain — 64 OFDM Sub-carriers (DFT Output)
+              {"Frequency Domain — 64 OFDM Sub-carriers (DFT Output)"}
             </span>
           </div>
           {/* @ts-ignore */}
@@ -426,26 +435,13 @@ export default function TabMathEngine() {
               {/* @ts-ignore */}
               <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
               {/* @ts-ignore */}
-              <XAxis dataKey="k" tick={{ fill: "#334155", fontSize: 8 }} tickLine={false} interval={7} label={{ value: "Sub-carrier index k", fill: "#475569", fontSize: 9, position: "insideBottom", offset: -2 }} />
+              <XAxis dataKey="index" tick={{ fill: "#334155", fontSize: 8 }} tickLine={false} interval={7} />
               {/* @ts-ignore */}
               <YAxis tick={{ fill: "#334155", fontSize: 8 }} tickLine={false} domain={[0, 1.1]} />
               {/* @ts-ignore */}
-              <Tooltip
-                contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #fbbf24", borderRadius: 8, fontFamily: "monospace", fontSize: 10 }}
-                formatter={(v: number, _: string, props: { payload: SubCarrier }) => [v.toFixed(3), props.payload.noisy ? "⚠ Noisy Sub-carrier" : "Sub-carrier |X[k]|"]}
-                labelFormatter={(l: number) => `k = ${l}`}
-              />
+              <Tooltip contentStyle={{ backgroundColor: "#0f172a", border: "1px solid #fbbf24", borderRadius: 8, fontFamily: "monospace", fontSize: 10 }} />
               {/* @ts-ignore */}
-              <Bar dataKey="mag" isAnimationActive={false} radius={[2, 2, 0, 0]}>
-                {subCarriers.map((entry, index) => (
-                  /* @ts-ignore */
-                  <Cell
-                    key={`cell-${index}`}
-                    fill={entry.noisy && running ? "#ef4444" : "#fbbf24"}
-                    style={{ filter: entry.noisy && running ? "drop-shadow(0 0 5px rgba(239,68,68,0.7))" : "drop-shadow(0 0 3px rgba(251,191,36,0.4))" }}
-                  />
-                ))}
-              </Bar>
+              <Bar dataKey="amplitude" fill="#fbbf24" isAnimationActive={false} radius={[2, 2, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -453,42 +449,21 @@ export default function TabMathEngine() {
 
       {/* ── INSIGHT FOOTER ── */}
       <div className="grid grid-cols-3 gap-4 text-[11px] font-mono">
-        {[
-          {
-            label: "DFT ORTHOGONALITY",
-            value: "64 sub-carriers",
-            detail: "Δf = 78.125 kHz each",
-            color: "#fbbf24",
-            bg: "rgba(251,191,36,0.06)",
-            border: "rgba(251,191,36,0.25)",
-          },
-          {
-            label: "TIME DOMAIN CHAOS",
-            value: noise > 0.5 ? "HIGH DISTORTION" : "NOMINAL",
-            detail: `SNR ≈ ${Math.round((1 - noise) * 40)} dB`,
-            color: noise > 0.5 ? "#ef4444" : "#10b981",
-            bg: noise > 0.5 ? "rgba(239,68,68,0.06)" : "rgba(16,185,129,0.06)",
-            border: noise > 0.5 ? "rgba(239,68,68,0.25)" : "rgba(16,185,129,0.25)",
-          },
-          {
-            label: "DFT SEPARATION",
-            value: "PERFECT",
-            detail: "Orthogonal → no inter-carrier interference",
-            color: "#22d3ee",
-            bg: "rgba(34,211,238,0.06)",
-            border: "rgba(34,211,238,0.25)",
-          },
-        ].map(s => (
-          <div
-            key={s.label}
-            className="rounded-xl p-4 border"
-            style={{ background: s.bg, borderColor: s.border }}
-          >
-            <div className="tracking-widest text-slate-500 text-[9px] mb-1">{s.label}</div>
-            <div className="font-bold text-sm" style={{ color: s.color }}>{s.value}</div>
-            <div className="text-slate-600 text-[9px] mt-1">{s.detail}</div>
-          </div>
-        ))}
+        <div className="rounded-xl p-4 border" style={{ background: "rgba(251,191,36,0.06)", borderColor: "rgba(251,191,36,0.25)" }}>
+          <div className="tracking-widest text-slate-500 text-[9px] mb-1">{"DFT ORTHOGONALITY"}</div>
+          <div className="font-bold text-sm" style={{ color: "#fbbf24" }}>{"64 sub-carriers"}</div>
+          <div className="text-slate-600 text-[9px] mt-1">{"Δf = 78.125 kHz each"}</div>
+        </div>
+        <div className="rounded-xl p-4 border" style={{ background: noiseLevel > 0.5 ? "rgba(239,68,68,0.06)" : "rgba(16,185,129,0.06)", borderColor: noiseLevel > 0.5 ? "rgba(239,68,68,0.25)" : "rgba(16,185,129,0.25)" }}>
+          <div className="tracking-widest text-slate-500 text-[9px] mb-1">{"TIME DOMAIN CHAOS"}</div>
+          <div className="font-bold text-sm" style={{ color: noiseLevel > 0.5 ? "#ef4444" : "#10b981" }}>{noiseLevel > 0.5 ? "HIGH DISTORTION" : "NOMINAL"}</div>
+          <div className="text-slate-600 text-[9px] mt-1">{"SNR ≈ "}{Math.round((1 - noiseLevel) * 40)}{" dB"}</div>
+        </div>
+        <div className="rounded-xl p-4 border" style={{ background: "rgba(34,211,238,0.06)", borderColor: "rgba(34,211,238,0.25)" }}>
+          <div className="tracking-widest text-slate-500 text-[9px] mb-1">{"DFT SEPARATION"}</div>
+          <div className="font-bold text-sm" style={{ color: "#22d3ee" }}>{"PERFECT"}</div>
+          <div className="text-slate-600 text-[9px] mt-1">{"Orthogonal → no inter-carrier interference"}</div>
+        </div>
       </div>
 
     </div>
