@@ -2,6 +2,7 @@
 import React, { useState } from "react";
 import TabTimeFreq from "./TabTimeFreq";
 import TabMathEngine from "./TabMathEngine";
+import TabChannelEst from "./TabChannelEst";
 import { Activity, Cpu, Radio, Zap } from "lucide-react";
 
 const TABS = [
@@ -69,14 +70,8 @@ export default function Home() {
             </div>
           )}
 
-          {/* Active Tab 3: Safe Placeholder */}
-          {activeTab === 3 && (
-            <div className="bg-slate-900 border border-slate-700 rounded-2xl p-16 text-center shadow-xl">
-              <Zap size={56} className="mx-auto text-slate-600 mb-6 animate-pulse" />
-              <h2 className="text-2xl font-mono text-slate-300 font-bold tracking-widest">Tab 4: Channel Estimation Loading...</h2>
-              <p className="text-slate-500 font-mono text-sm mt-3">H[k] = Y[k]/X[k] algorithm environment booting securely.</p>
-            </div>
-          )}
+          {/* Active Tab 3: Channel Estimation */}
+          {activeTab === 3 && <TabChannelEst />}
 
         </div>
 
